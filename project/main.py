@@ -1,6 +1,7 @@
 from fastapi import FastAPI
-from api.users import router as users_router
 import logging
+
+from routes.users import router as users_router
 
 
 # app configuration
@@ -15,7 +16,6 @@ logger = logging.getLogger(__name__)
 
 # include the users router
 app.include_router(users_router)
-
 
 @app.get('/')
 def read_root():
