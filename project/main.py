@@ -1,11 +1,11 @@
 from fastapi import FastAPI
 import logging
 
-from routes.users import router as users_router
+from contextlib import asynccontextmanager
+from database import engine, Base
+from routes.users import router as users_router 
+from config import get_settings
 
-
-# app configuration
-app = FastAPI()
 
 # configure logging
 logging.basicConfig(
@@ -13,10 +13,32 @@ logging.basicConfig(
     format="%(asctime)s - %(levelname)s - %(name)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
+settings = get_settings()
 
-# include the users router
-app.include_router(users_router)
 
-@app.get('/')
-def read_root():
-    return {"message": "Welcome to the API"}
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # create tables on startup
+    logger.info("Creating database tables...")
+
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    logger.info("Database tables created successfully")
+
+    yield # app runs here
+
+    logger.info("Shutting down: closing database connection...")
+    await engine.dispose()
+
+
+app = FastAPI(
+    title=settings.APP_NAME,
+    lifespan=lifespan,
+    debug=settings.DEBUG
+)
+
+app.include_router(users_router, prefix="/api/v1")
+
+@app.get("/health", response_description="Health check endpoint")
+def health_check():
+    return {"status": "healthy", "app_name": settings.APP_NAME}
