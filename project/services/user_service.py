@@ -44,7 +44,6 @@ class UserService:
 
     async def update_user(self, user_id: int, user_data: UserUpdate) -> User | None:
         user = await self.get_user_by_id(user_id)
-        print(f"user found {user}")
         if not user:
             return None
         

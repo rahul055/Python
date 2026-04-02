@@ -5,7 +5,7 @@ from functools import lru_cache
 class Settings(BaseSettings):
     # pydantic settings reads from env variables and .env file
 
-    DATABASE_URL: str = ''
+    DATABASE_URL: str
     APP_NAME: str = 'AI BACKEND API'
     DEBUG: bool = False
 
@@ -14,5 +14,5 @@ class Settings(BaseSettings):
 
 @lru_cache()
 def get_settings():
-    return Settings()
+    return Settings() # type: ignore
 

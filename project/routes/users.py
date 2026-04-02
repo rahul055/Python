@@ -43,7 +43,7 @@ async def get_user_by_id(user_id: int, service: UserService = Depends(get_user_s
         if not user:
             logger.warning(f" User with ID {user_id} not found")
             raise HTTPException(status_code=404, detail="user not found")
-        return 
+        return user
 
     except HTTPException:
         raise
@@ -96,7 +96,8 @@ async def delete_user(user_id: int, service: UserService = Depends(get_user_serv
         if not is_deleted:
             logger.warning(f"Cannot delete user with ID: {user_id}")
             raise HTTPException(status_code=404, detail="User not found")
-        return {"detail": "User deleted successfully"}
+        
+        
     except HTTPException:
         raise
     except Exception as e:
