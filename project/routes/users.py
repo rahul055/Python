@@ -8,6 +8,11 @@ from schemas.user import UserCreate, UserOutput, UserUpdate
 from database import get_db
 from sqlalchemy.ext.asyncio import AsyncSession
 
+# redis imports
+from redis_client import get_redis
+import redis.asyncio as redis
+from services.cache_service import CacheService
+
 
 # configuration
 router = APIRouter(prefix="/users", tags=["users"])
@@ -16,6 +21,10 @@ logger = logging.getLogger(__name__)
 
 def get_user_service(db: AsyncSession = Depends(get_db)) -> UserService:
     return UserService(db)
+
+# Add a Redis dependency function (same pattern as get_user_service):
+def get_cache_service(redis_client: redis.Redis = Depends(get_redis)) -> CacheService:
+    return CacheService(redis_client)
 
 
 @router.get('', response_model=list[UserOutput], response_description="List of users")
@@ -36,13 +45,27 @@ async def get_users(
 
 
 @router.get('/{user_id}', response_model=UserOutput, response_description="Get user details by ID")
-async def get_user_by_id(user_id: int, service: UserService = Depends(get_user_service)):
+async def get_user_by_id(user_id: int, service: UserService = Depends(get_user_service), cache: CacheService = Depends(get_cache_service)):
     try:
         logger.info(f"Fetching user with ID: {user_id}")
+
+        # check cache first
+        cache_key = f"user:{user_id}"
+        cached = await cache.get(cache_key)
+        if cached:
+            logger.info(f"Cache hit for user ID: {user_id}")
+            return cached
+
+        # if cache miss hit the database
         user = await service.get_user_by_id(user_id)
         if not user:
             logger.warning(f" User with ID {user_id} not found")
             raise HTTPException(status_code=404, detail="user not found")
+        
+        # 3. Store result in cache for next time (TTL: 5 min)
+        output = UserOutput.model_validate(user).model_dump()
+        await cache.set(cache_key, output, ttl_seconds=300)
+
         return user
 
     except HTTPException:
@@ -68,7 +91,7 @@ async def create_user(user: UserCreate, service: UserService = Depends(get_user_
 
 
 @router.patch("/{user_id}", response_model=UserOutput, response_description="Update user details")
-async def update_user(user_id: int, user: UserUpdate, service: UserService = Depends(get_user_service)):
+async def update_user(user_id: int, user: UserUpdate, service: UserService = Depends(get_user_service), cache: CacheService = Depends(get_cache_service)):
     try:
         logger.info(f"Updating user with ID: {user_id}")
         updated_user = await service.update_user(user_id, user)
@@ -76,6 +99,8 @@ async def update_user(user_id: int, user: UserUpdate, service: UserService = Dep
         if not updated_user:
             logger.warning(f"User with ID {user_id} not found")
             raise HTTPException(status_code=404, detail="User not found")
+        
+        await cache.delete(f"user:{user_id}")  # Invalidate cache on update
         
         return updated_user
     
@@ -88,7 +113,7 @@ async def update_user(user_id: int, user: UserUpdate, service: UserService = Dep
 
 
 @router.delete("/{user_id}", status_code=204, response_description="Delete a user")
-async def delete_user(user_id: int, service: UserService = Depends(get_user_service)):
+async def delete_user(user_id: int, service: UserService = Depends(get_user_service), cache: CacheService = Depends(get_cache_service)):
     try:
         logger.info(f"Deleting user with ID: {user_id}")
         is_deleted = await service.delete_user(user_id)
@@ -97,7 +122,7 @@ async def delete_user(user_id: int, service: UserService = Depends(get_user_serv
             logger.warning(f"Cannot delete user with ID: {user_id}")
             raise HTTPException(status_code=404, detail="User not found")
         
-        
+        await cache.delete(f"user:{user_id}")  # Invalidate cache on delete
     except HTTPException:
         raise
     except Exception as e:
