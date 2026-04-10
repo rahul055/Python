@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str
     APP_NAME: str = 'AI BACKEND API'
     DEBUG: bool = False
+    REDIS_URL: str
 
     model_config = SettingsConfigDict(env_file='.env')
 

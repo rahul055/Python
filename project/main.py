@@ -5,7 +5,7 @@ from contextlib import asynccontextmanager
 from database import engine, Base
 from routes.users import router as users_router 
 from config import get_settings
-
+from redis_client import get_redis
 
 # configure logging
 logging.basicConfig(
@@ -24,6 +24,10 @@ async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     logger.info("Database tables created successfully")
+
+    r = get_redis()
+    await r.ping() # type: ignore
+    logger.info("Connected to Redis successfully")
 
     yield # app runs here
 
